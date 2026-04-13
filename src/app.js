@@ -28,7 +28,7 @@ const app = express();
 // 1) GLOBAL MIDDLEWARES
 // Implement CORS
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: 'https://bellaveste-frontend.vercel.app',
   credentials: true
 }));
 // Access-Control-Allow-Origin *
