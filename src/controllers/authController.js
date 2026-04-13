@@ -1,9 +1,52 @@
 const crypto = require('crypto');
 const { promisify } = require('util');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const User = require('../models/userModel');
 const AppError = require('../utils/appError');
 const asyncHandler = require('../utils/asyncHandler');
+
+const createEmailTransporter = () => {
+  if (!process.env.SB_SMTP_USER || !process.env.SB_SMTP_PASS) {
+    throw new AppError(
+      'Email is not configured. Please set SB_SMTP_USER and SB_SMTP_PASS.',
+      500
+    );
+  }
+
+  if (process.env.SB_SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SB_SMTP_HOST,
+      port: Number(process.env.SB_SMTP_PORT || 587),
+      secure: String(process.env.SB_SMTP_SECURE || 'false') === 'true',
+      auth: {
+        user: process.env.SB_SMTP_USER,
+        pass: process.env.SB_SMTP_PASS
+      }
+    });
+  }
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.SB_SMTP_USER,
+      pass: process.env.SB_SMTP_PASS
+    }
+  });
+};
+
+const sendEmail = async ({ to, subject, text, html }) => {
+  const transporter = createEmailTransporter();
+  const fromEmail = process.env.SB_SMTP_FROM || process.env.SB_SMTP_USER;
+
+  await transporter.sendMail({
+    from: `Bellaveste <${fromEmail}>`,
+    to,
+    subject,
+    text,
+    html
+  });
+};
 
 const signToken = id => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -140,20 +183,16 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
   const message = `Forgot your password? Submit a PATCH request with your new password and passwordConfirm to: ${resetURL}.\nIf you didn't forget your password, please ignore this email!`;
 
   try {
-    // await sendEmail({
-    //   email: user.email,
-    //   subject: 'Your password reset token (valid for 10 min)',
-    //   message
-    // });
-    
-    // MOCK EMAIL SENDING
-    console.log('EMAIL SENT TO:', user.email);
-    console.log('RESET URL:', resetURL);
+    await sendEmail({
+      to: user.email,
+      subject: 'Your password reset token (valid for 10 min)',
+      text: message
+    });
 
     res.status(200).json({
       status: 'success',
       message: 'Token sent to email!',
-      resetToken // DEV ONLY
+      ...(process.env.NODE_ENV !== 'production' ? { resetToken } : {})
     });
   } catch (err) {
     user.passwordResetToken = undefined;
